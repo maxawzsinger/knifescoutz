@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>NetplayJS 2-Player Platformer Race</title>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: #111;
+        color: #ddd;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu,
+          Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji",
+          "Segoe UI Emoji";
+      }
+      #hud {
+        position: fixed;
+        left: 0;
+        right: 0;
+        top: 0;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        padding: 8px 10px;
+        background: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(6px);
+        z-index: 1000;
+        font-size: 14px;
+      }
+      #hud .spacer {
+        flex: 1;
+      }
+      #footer {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding: 8px 10px;
+        font-size: 12px;
+        color: #8aa;
+        opacity: 0.9;
+      }
+      #controls {
+        position: fixed;
+        right: 10px;
+        top: 60px;
+        background: rgba(0, 0, 0, 0.8);
+        backdrop-filter: blur(8px);
+        padding: 12px 16px;
+        border-radius: 8px;
+        border: 1px solid #333;
+        min-width: 240px;
+        z-index: 1000;
+      }
+      #controls h3 {
+        margin: 0 0 12px 0;
+        font-size: 14px;
+        font-weight: 600;
+        color: #fff;
+      }
+      .control-item {
+        margin-bottom: 12px;
+      }
+      .control-item:last-child {
+        margin-bottom: 0;
+      }
+      .control-label {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 4px;
+        font-size: 12px;
+        color: #aaa;
+      }
+      .control-value {
+        color: #5af;
+        font-weight: 500;
+      }
+      input[type="range"] {
+        width: 100%;
+        height: 4px;
+        border-radius: 2px;
+        background: #2a2a2a;
+        outline: none;
+        appearance: none;
+        -webkit-appearance: none;
+      }
+      input[type="range"]::-webkit-slider-thumb {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #2a6fd6;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      input[type="range"]::-webkit-slider-thumb:hover {
+        background: #4a8ff6;
+      }
+      input[type="range"]::-moz-range-thumb {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #2a6fd6;
+        cursor: pointer;
+        border: none;
+        transition: background 0.15s;
+      }
+      input[type="range"]::-moz-range-thumb:hover {
+        background: #4a8ff6;
+      }
+    </style>
+    <script src="https://unpkg.com/netplayjs@0.4.1/dist/netplay.js"></script>
+  </head>
+  <body>
+    <div id="hud">
+      <div>
+        <strong>Controls:</strong> WASD/Arrows - Move | Space - Jump/Fire | J -
+        Toggle Knife/Gun Mode
+      </div>
+      <div style="font-weight: bold; font-size: 16px; margin-left: 20px">
+        <span style="color: #ff5a5a">Knife</span
+        ><span style="color: #62a5ff">Scoutz</span>
+      </div>
+      <div class="spacer"></div>
+      <div id="statusText">Waiting for connection...</div>
+    </div>
+
+    <div id="controls">
+      <h3>Physics Controls</h3>
+      <div class="control-item">
+        <div class="control-label">
+          <span>🔪/🔫 Mode Toggle</span>
+          <span class="control-value">Press J</span>
+        </div>
+        <div style="font-size: 10px; color: #888; margin-top: 4px">
+          Knife: accel 2, speed 10<br />
+          Gun: accel 0.2, speed 2.1
+        </div>
+      </div>
+      <div class="control-item">
+        <div class="control-label">
+          <span>Gravity</span>
+          <span class="control-value" id="gravityValue">0.7</span>
+        </div>
+        <input
+          type="range"
+          id="gravitySlider"
+          min="0"
+          max="2"
+          step="0.1"
+          value="0.7"
+        />
+      </div>
+      <div class="control-item">
+        <div class="control-label">
+          <span>Run Acceleration</span>
+          <span class="control-value" id="runAccelValue">0.7</span>
+        </div>
+        <input
+          type="range"
+          id="runAccelSlider"
+          min="0"
+          max="2"
+          step="0.1"
+          value="0.7"
+        />
+      </div>
+      <div class="control-item">
+        <div class="control-label">
+          <span>Max Run Speed</span>
+          <span class="control-value" id="maxRunSpeedValue">4.2</span>
+        </div>
+        <input
+          type="range"
+          id="maxRunSpeedSlider"
+          min="1"
+          max="10"
+          step="0.1"
+          value="4.2"
+        />
+      </div>
+      <div class="control-item">
+        <div class="control-label">
+          <span>Jump Power</span>
+          <span class="control-value" id="jumpImpulseValue">12.0</span>
+        </div>
+        <input
+          type="range"
+          id="jumpImpulseSlider"
+          min="5"
+          max="20"
+          step="0.5"
+          value="12.0"
+        />
+      </div>
+      <div class="control-item">
+        <div class="control-label">
+          <span>Bullet Speed</span>
+          <span class="control-value" id="bulletSpeedValue">8.0</span>
+        </div>
+        <input
+          type="range"
+          id="bulletSpeedSlider"
+          min="1"
+          max="20"
+          step="0.5"
+          value="8.0"
+        />
+      </div>
+    </div>
+
+    <div id="footer"></div>
+
+    <script>
+      (function () {
+        const DEV_SLIDERS = false;
+
+        const { Game, RollbackWrapper, NetplayPlayer, DefaultInput, Vec2 } =
+          netplayjs;
+
+        // Physics parameters (modifiable via sliders)
+        let physicsParams = {
+          gravity: 0.7,
+          runAccel: 0.7,
+          maxRunSpeed: 4.2,
+          jumpImpulse: 12.0,
+          bulletSpeed: 8.0,
+        };
+
+        // Wire up physics control sliders
+        function setupPhysicsControls() {
+          const controls = [
+            {
+              slider: "gravitySlider",
+              value: "gravityValue",
+              param: "gravity",
+            },
+            {
+              slider: "runAccelSlider",
+              value: "runAccelValue",
+              param: "runAccel",
+            },
+            {
+              slider: "maxRunSpeedSlider",
+              value: "maxRunSpeedValue",
+              param: "maxRunSpeed",
+            },
+            {
+              slider: "jumpImpulseSlider",
+              value: "jumpImpulseValue",
+              param: "jumpImpulse",
+            },
+            {
+              slider: "bulletSpeedSlider",
+              value: "bulletSpeedValue",
+              param: "bulletSpeed",
+            },
+          ];
+
+          controls.forEach(({ slider, value, param }) => {
+            const sliderEl = document.getElementById(slider);
+            const valueEl = document.getElementById(value);
+
+            sliderEl.addEventListener("input", (e) => {
+              const val = parseFloat(e.target.value);
+              physicsParams[param] = val;
+              valueEl.textContent = val.toFixed(1);
+            });
+          });
+        }
+        setupPhysicsControls();
+
+        // Hide controls panel if DEV_SLIDERS is false
+        if (!DEV_SLIDERS) {
+          const controlsPanel = document.getElementById("controls");
+          if (controlsPanel) {
+            controlsPanel.style.display = "none";
+          }
+        }
+
+        const TILE_SIZE = 24;
+
+        // Level legend:
+        //   # = solid
+        //   B = breakable (breaks 0.5s after first touch)
+        //   V = spike (kills on overlap)
+        //   S = spawn area (left/topmost used for both)
+        //   F = finish gate
+        const LEVEL = [
+          "############################################",
+          "#S        ####         B      ####       F #",
+          "#         ####      V         ####         #",
+          "#                    BBB                  ##",
+          "#   #####         #####          #######   #",
+          "#        V                                ##",
+          "#   ##########               BBB          ##",
+          "#                 #######                 ##",
+          "#     BBB                                   #",
+          "#                V         ######          #",
+          "#         #######        B        BBB      #",
+          "#   BBB            #######                 #",
+          "#                 V           ######       #",
+          "#     ######         BBB                  ##",
+          "#S                   V         BBB        ##",
+          "############################################",
+        ];
+
+        const LEVEL_W = LEVEL[0].length;
+        const LEVEL_H = LEVEL.length;
+        const CANVAS_W = LEVEL_W * TILE_SIZE; // show full level width
+        const CANVAS_H = LEVEL_H * TILE_SIZE; // show full level height
+
+        function findSpawnPositions() {
+          const spawns = [];
+          for (let y = 0; y < LEVEL_H; y++) {
+            for (let x = 0; x < LEVEL_W; x++) {
+              if (LEVEL[y][x] === "S") {
+                spawns.push({
+                  x: (x + 0.5) * TILE_SIZE,
+                  y: (y - 0.2) * TILE_SIZE,
+                });
+              }
+            }
+          }
+          if (spawns.length === 0)
+            return [{ x: TILE_SIZE * 2, y: TILE_SIZE * 2 }];
+          if (spawns.length === 1) spawns.push(spawns[0]);
+          return spawns.slice(0, 2);
+        }
+
+        // Find a safe spawn near the bottom-right of the map interior.
+        function findBottomRightSpawn() {
+          // Search from bottom-right inward for empty air with solid ground beneath.
+          for (let y = LEVEL_H - 2; y >= 1; y--) {
+            for (let x = LEVEL_W - 2; x >= 1; x--) {
+              const here = LEVEL[y][x];
+              const below = LEVEL[y + 1][x];
+              // Standable if current tile is empty space and below is solid or breakable.
+              if (here === " " && (below === "#" || below === "B")) {
+                return {
+                  x: (x + 0.5) * TILE_SIZE,
+                  y: (y - 0.2) * TILE_SIZE,
+                };
+              }
+            }
+          }
+          // Fallback to near bottom-right if no suitable tile found.
+          return {
+            x: (LEVEL_W - 2.5) * TILE_SIZE,
+            y: (LEVEL_H - 2.2) * TILE_SIZE,
+          };
+        }
+
+        function rectsOverlap(a, b) {
+          return (
+            a.x < b.x + b.w &&
+            a.x + a.w > b.x &&
+            a.y < b.y + b.h &&
+            a.y + a.h > b.y
+          );
+        }
+
+        class PlatformerGame extends Game {
+          static timestep = 1000 / 60;
+          static canvasSize = { width: CANVAS_W, height: CANVAS_H };
+          static highDPI = true;
+
+          // Replicated state
+          players = [];
+          started = false;
+          winnerPlayerId = undefined; // number | undefined
+          breakTimers = {}; // key "x,y" -> frames remaining until break
+          broken = {}; // key "x,y" -> true (for broken 'B' tiles)
+          lasers = []; // active lasers { ownerId, x1, y1, x2, y2, spawnTime } (time in frames)
+          frameCount = 0; // total frames elapsed since game start
+
+          tileAt(tx, ty) {
+            if (tx < 0 || ty < 0 || tx >= LEVEL_W || ty >= LEVEL_H) return "#";
+            const key = tx + "," + ty;
+            if (this.broken[key]) return " ";
+            return LEVEL[ty][tx];
+          }
+          breakTile(tx, ty) {
+            const key = tx + "," + ty;
+            this.broken[key] = true;
+          }
+
+          // Non-replicated transient
+          nonrep = { overlayClickArmed: true };
+
+          constructor(canvas, players) {
+            super();
+            const spawnPositions = findSpawnPositions();
+            this.players = players.map((p, idx) => ({
+              id: p.getID(),
+              x: spawnPositions[idx].x,
+              y: spawnPositions[idx].y,
+              vx: 0,
+              vy: 0,
+              onGround: false,
+              deaths: 0,
+              kills: 0,
+              mode: "knife", // "knife" or "gun"
+              lastDir: 1, // 1 = right, -1 = left
+              beamCooldown: 0, // frames until next beam
+            }));
+            // Ensure red player (id 0) starts bottom-right.
+            const br = findBottomRightSpawn();
+            if (this.players[0]) {
+              this.players[0].x = br.x;
+              this.players[0].y = br.y;
+            }
+          }
+
+          resetAll(players) {
+            // Reset level breakables and player state
+            this.breakTimers = {};
+            this.broken = {};
+            this.winnerPlayerId = undefined;
+            this.started = false;
+            this.lasers = [];
+            this.frameCount = 0;
+            const spawnPositions = findSpawnPositions();
+            this.players.forEach((pl, idx) => {
+              pl.x = spawnPositions[idx].x;
+              pl.y = spawnPositions[idx].y;
+              pl.vx = 0;
+              pl.vy = 0;
+              pl.onGround = false;
+              pl.kills = 0;
+              pl.mode = "knife";
+              pl.lastDir = 1;
+              pl.beamCooldown = 0;
+            });
+            // Keep red player (id 0) bottom-right on reset.
+            const br = findBottomRightSpawn();
+            if (this.players[0]) {
+              this.players[0].x = br.x;
+              this.players[0].y = br.y;
+            }
+          }
+
+          // If either player's input indicates intent to start, start.
+          maybeStart(inputs) {
+            if (this.started) return;
+            for (const [, input] of inputs) {
+              const kp = input.keysPressed || {};
+              if (kp[" "] || kp["Enter"] || kp["Space"] || kp["z"] || kp["x"]) {
+                this.started = true;
+                return;
+              }
+              const v = input.wasd();
+              if (v.x !== 0 || v.y !== 0) {
+                this.started = true;
+                return;
+              }
+            }
+          }
+
+          handlePlayerDeath(pl, killer) {
+            pl.deaths += 1;
+            if (killer) {
+              killer.kills += 1;
+            }
+            const spawnPositions = findSpawnPositions();
+            if (pl.id === 0) {
+              const br = findBottomRightSpawn();
+              pl.x = br.x;
+              pl.y = br.y;
+            } else {
+              const idx = 1; // blue player uses the other spawn marker
+              pl.x = spawnPositions[idx].x;
+              pl.y = spawnPositions[idx].y;
+            }
+            pl.vx = 0;
+            pl.vy = 0;
+            pl.onGround = false;
+          }
+
+          // Raycast from (x, y) in direction (dx, dy) until hitting terrain
+          raycastLaser(x, y, dx, dy) {
+            const maxDist = Math.max(CANVAS_W, CANVAS_H) * 2;
+            const step = 1; // pixel steps for raycasting
+            let currentX = x;
+            let currentY = y;
+
+            for (let dist = 0; dist < maxDist; dist += step) {
+              currentX += dx * step;
+              currentY += dy * step;
+
+              const tx = Math.floor(currentX / TILE_SIZE);
+              const ty = Math.floor(currentY / TILE_SIZE);
+              const tile = this.tileAt(tx, ty);
+
+              if (tile === "#" || tile === "B") {
+                return { x: currentX, y: currentY };
+              }
+            }
+
+            return { x: currentX, y: currentY };
+          }
+
+          // Check if a line segment intersects with a rectangle
+          lineIntersectsRect(x1, y1, x2, y2, rect) {
+            // Check if either endpoint is inside the rectangle
+            if (
+              x1 >= rect.x &&
+              x1 <= rect.x + rect.w &&
+              y1 >= rect.y &&
+              y1 <= rect.y + rect.h
+            )
+              return true;
+            if (
+              x2 >= rect.x &&
+              x2 <= rect.x + rect.w &&
+              y2 >= rect.y &&
+              y2 <= rect.y + rect.h
+            )
+              return true;
+
+            // Check if line intersects any of the rectangle's edges
+            const lineIntersectsLine = (
+              ax1,
+              ay1,
+              ax2,
+              ay2,
+              bx1,
+              by1,
+              bx2,
+              by2
+            ) => {
+              const denom =
+                (by2 - by1) * (ax2 - ax1) - (bx2 - bx1) * (ay2 - ay1);
+              if (Math.abs(denom) < 0.0001) return false; // parallel
+
+              const ua =
+                ((bx2 - bx1) * (ay1 - by1) - (by2 - by1) * (ax1 - bx1)) / denom;
+              const ub =
+                ((ax2 - ax1) * (ay1 - by1) - (ay2 - ay1) * (ax1 - bx1)) / denom;
+
+              return ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1;
+            };
+
+            // Check against all four edges
+            if (
+              lineIntersectsLine(
+                x1,
+                y1,
+                x2,
+                y2,
+                rect.x,
+                rect.y,
+                rect.x + rect.w,
+                rect.y
+              )
+            )
+              return true;
+            if (
+              lineIntersectsLine(
+                x1,
+                y1,
+                x2,
+                y2,
+                rect.x + rect.w,
+                rect.y,
+                rect.x + rect.w,
+                rect.y + rect.h
+              )
+            )
+              return true;
+            if (
+              lineIntersectsLine(
+                x1,
+                y1,
+                x2,
+                y2,
+                rect.x,
+                rect.y + rect.h,
+                rect.x + rect.w,
+                rect.y + rect.h
+              )
+            )
+              return true;
+            if (
+              lineIntersectsLine(
+                x1,
+                y1,
+                x2,
+                y2,
+                rect.x,
+                rect.y,
+                rect.x,
+                rect.y + rect.h
+              )
+            )
+              return true;
+
+            return false;
+          }
+
+          tick(playerInputs) {
+            // Game is only playable after both peers connect (wrapper guarantees), plus explicit start.
+            this.maybeStart(playerInputs);
+            if (!this.started) return;
+
+            this.frameCount += 1;
+
+            const gravity = physicsParams.gravity;
+            const jumpImpulse = physicsParams.jumpImpulse;
+            const friction = 0.85;
+
+            // Advance timers for breakable tiles; when they hit 0, remove tile.
+            for (const key of Object.keys(this.breakTimers)) {
+              this.breakTimers[key] -= 1;
+              if (this.breakTimers[key] <= 0) {
+                const [tx, ty] = key.split(",").map(Number);
+                if (this.tileAt(tx, ty) === "B") this.breakTile(tx, ty);
+                delete this.breakTimers[key];
+              }
+            }
+
+            for (const [np, input] of playerInputs) {
+              const id = np.getID();
+              const pl = this.players[id];
+              if (!pl) continue;
+
+              // Handle mode toggle (j key)
+              const pressed = input.keysPressed || {};
+              if (pressed["j"]) {
+                pl.mode = pl.mode === "knife" ? "gun" : "knife";
+              }
+
+              // Mode-specific physics parameters
+              const runAccel = pl.mode === "knife" ? 2 : 0.2;
+              const maxRunSpeed = pl.mode === "knife" ? 10 : 2.1;
+
+              // Horizontal input
+              const move = input.wasd();
+              pl.vx += move.x * runAccel;
+              if (pl.vx > maxRunSpeed) pl.vx = maxRunSpeed;
+              if (pl.vx < -maxRunSpeed) pl.vx = -maxRunSpeed;
+
+              // Track last direction of travel for knife
+              if (Math.abs(pl.vx) > 0.5) {
+                pl.lastDir = pl.vx > 0 ? 1 : -1;
+              }
+
+              // Jump
+              const held = input.keysHeld || {};
+              const jumpPressed = !!(
+                pressed["w"] ||
+                pressed["ArrowUp"] ||
+                pressed[" "] ||
+                pressed["Space"]
+              );
+              if (jumpPressed && pl.onGround) {
+                pl.vy = -jumpImpulse;
+                pl.onGround = false;
+              }
+
+              // Gun mode: handle laser firing
+              if (pl.mode === "gun") {
+                if (pl.beamCooldown > 0) {
+                  pl.beamCooldown -= 1;
+                }
+
+                // Fire laser on spacebar press (if not cooling down)
+                const firePressed = !!(pressed[" "] || pressed["Space"]);
+                if (firePressed && pl.beamCooldown === 0) {
+                  // Fire horizontally in lastDir
+                  const dirX = pl.lastDir;
+                  const dirY = 0;
+
+                  // Raycast to find where laser hits terrain
+                  // Offset start position away from player so laser doesn't connect to them
+                  const offsetDist = 20;
+                  const laserStart = {
+                    x: pl.x + dirX * offsetDist,
+                    y: pl.y + dirY * offsetDist,
+                  };
+                  const laserEnd = this.raycastLaser(
+                    laserStart.x,
+                    laserStart.y,
+                    dirX,
+                    dirY
+                  );
+
+                  // Check if laser hits any player
+                  for (const other of this.players) {
+                    if (other.id !== pl.id) {
+                      const otherRect = {
+                        x: other.x - 8,
+                        y: other.y - 11,
+                        w: 16,
+                        h: 22,
+                      };
+                      if (
+                        this.lineIntersectsRect(
+                          laserStart.x,
+                          laserStart.y,
+                          laserEnd.x,
+                          laserEnd.y,
+                          otherRect
+                        )
+                      ) {
+                        this.handlePlayerDeath(other, pl);
+                      }
+                    }
+                  }
+
+                  this.lasers.push({
+                    ownerId: pl.id,
+                    x1: laserStart.x,
+                    y1: laserStart.y,
+                    x2: laserEnd.x,
+                    y2: laserEnd.y,
+                    spawnTime: this.frameCount,
+                  });
+                  pl.beamCooldown = 180; // 3 seconds
+                }
+              }
+
+              // Gravity
+              pl.vy += gravity;
+
+              // Integrate and collide with tiles (AABB vs grid)
+              const width = 16;
+              const height = 22; // player AABB
+
+              // Horizontal step
+              let newX = pl.x + pl.vx;
+              const xMin = Math.floor((newX - width / 2) / TILE_SIZE);
+              const xMax = Math.floor((newX + width / 2) / TILE_SIZE);
+              const yMin = Math.floor((pl.y - height / 2) / TILE_SIZE);
+              const yMax = Math.floor((pl.y + height / 2) / TILE_SIZE);
+              let blockedX = false;
+              for (let ty = yMin; ty <= yMax; ty++) {
+                for (let tx = xMin; tx <= xMax; tx++) {
+                  const t = this.tileAt(tx, ty);
+                  if (t === "#" || t === "B") {
+                    const tileRect = {
+                      x: tx * TILE_SIZE,
+                      y: ty * TILE_SIZE,
+                      w: TILE_SIZE,
+                      h: TILE_SIZE,
+                    };
+                    const playerRect = {
+                      x: newX - width / 2,
+                      y: pl.y - height / 2,
+                      w: width,
+                      h: height,
+                    };
+                    if (rectsOverlap(playerRect, tileRect)) {
+                      blockedX = true;
+                    }
+                  }
+                }
+              }
+              if (blockedX) {
+                newX = pl.x;
+                pl.vx = 0;
+              } else {
+                pl.x = newX;
+              }
+
+              // Vertical step
+              let newY = pl.y + pl.vy;
+              const v_xMin = Math.floor((pl.x - width / 2) / TILE_SIZE);
+              const v_xMax = Math.floor((pl.x + width / 2) / TILE_SIZE);
+              const v_yMin = Math.floor((newY - height / 2) / TILE_SIZE);
+              const v_yMax = Math.floor((newY + height / 2) / TILE_SIZE);
+              let blockedY = false;
+              let landed = false;
+              for (let ty = v_yMin; ty <= v_yMax; ty++) {
+                for (let tx = v_xMin; tx <= v_xMax; tx++) {
+                  const t = this.tileAt(tx, ty);
+                  if (t === "#" || t === "B") {
+                    const tileRect = {
+                      x: tx * TILE_SIZE,
+                      y: ty * TILE_SIZE,
+                      w: TILE_SIZE,
+                      h: TILE_SIZE,
+                    };
+                    const playerRect = {
+                      x: pl.x - width / 2,
+                      y: newY - height / 2,
+                      w: width,
+                      h: height,
+                    };
+                    if (rectsOverlap(playerRect, tileRect)) {
+                      blockedY = true;
+                      if (
+                        pl.vy > 0 &&
+                        Math.abs(ty * TILE_SIZE - (pl.y + height / 2)) <
+                          TILE_SIZE
+                      )
+                        landed = true;
+                      // Start break timer if touching a breakable
+                      if (t === "B") {
+                        const key = tx + "," + ty;
+                        if (this.breakTimers[key] == null)
+                          this.breakTimers[key] = Math.round(0.5 * 60); // 0.5s @60fps
+                      }
+                    }
+                  }
+                }
+              }
+              if (blockedY) {
+                if (pl.vy > 0 && landed) pl.onGround = true;
+                else pl.onGround = false;
+                pl.vy = 0;
+                newY = pl.y;
+              } else {
+                pl.onGround = false;
+                pl.y = newY;
+              }
+
+              // Spikes and finish detection
+              const playerRectFull = {
+                x: pl.x - width / 2,
+                y: pl.y - height / 2,
+                w: width,
+                h: height,
+              };
+              const tx0 = Math.floor(playerRectFull.x / TILE_SIZE);
+              const ty0 = Math.floor(playerRectFull.y / TILE_SIZE);
+              const tx1 = Math.floor(
+                (playerRectFull.x + playerRectFull.w) / TILE_SIZE
+              );
+              const ty1 = Math.floor(
+                (playerRectFull.y + playerRectFull.h) / TILE_SIZE
+              );
+              for (let ty = ty0; ty <= ty1; ty++) {
+                for (let tx = tx0; tx <= tx1; tx++) {
+                  const t = this.tileAt(tx, ty);
+                  if (t === "V") {
+                    const tileRect = {
+                      x: tx * TILE_SIZE,
+                      y: ty * TILE_SIZE,
+                      w: TILE_SIZE,
+                      h: TILE_SIZE,
+                    };
+                    if (rectsOverlap(playerRectFull, tileRect)) {
+                      this.handlePlayerDeath(pl, null);
+                    }
+                  } else if (t === "F") {
+                    const tileRect = {
+                      x: tx * TILE_SIZE,
+                      y: ty * TILE_SIZE,
+                      w: TILE_SIZE,
+                      h: TILE_SIZE,
+                    };
+                    if (
+                      rectsOverlap(playerRectFull, tileRect) &&
+                      this.winnerPlayerId == null
+                    ) {
+                      this.winnerPlayerId = pl.id;
+                      this.started = false;
+                    }
+                  }
+                }
+              }
+
+              // Friction if on ground and no input
+              if (Math.abs(move.x) < 0.01 && pl.onGround) pl.vx *= friction;
+            }
+
+            // Knife mode: check knife collision with other players
+            const knifeTips = []; // Store knife tip positions for knife-vs-knife collision
+
+            for (const pl of this.players) {
+              if (pl.mode === "knife") {
+                const knifeReach = 18;
+                const knifeLength = 12;
+                const knifeHitSize = 6;
+
+                // Calculate knife position based on velocity direction
+                let angle;
+                const speed = Math.sqrt(pl.vx * pl.vx + pl.vy * pl.vy);
+                if (speed > 0.5) {
+                  angle = Math.atan2(pl.vy, pl.vx);
+                } else {
+                  angle = pl.lastDir > 0 ? 0 : Math.PI;
+                }
+
+                // Hitbox at the tip of the knife
+                const knifeTipDistance = knifeReach + knifeLength;
+                const knifeTipX = pl.x + Math.cos(angle) * knifeTipDistance;
+                const knifeTipY = pl.y + Math.sin(angle) * knifeTipDistance;
+
+                knifeTips.push({
+                  player: pl,
+                  x: knifeTipX,
+                  y: knifeTipY,
+                  angle: angle,
+                  dirX: Math.cos(angle),
+                  dirY: Math.sin(angle),
+                  hitSize: knifeHitSize,
+                  knifeRect: {
+                    x: knifeTipX - knifeHitSize / 2,
+                    y: knifeTipY - knifeHitSize / 2,
+                    w: knifeHitSize,
+                    h: knifeHitSize,
+                  },
+                });
+              }
+            }
+
+            // Check knife-on-knife collision: clash or kill
+            let knifeClashHappened = false;
+            if (knifeTips.length === 2) {
+              const tip1 = knifeTips[0];
+              const tip2 = knifeTips[1];
+              const dist = Math.sqrt(
+                (tip1.x - tip2.x) ** 2 + (tip1.y - tip2.y) ** 2
+              );
+
+              if (dist < (tip1.hitSize + tip2.hitSize) / 2) {
+                // Check if knives are facing towards each other
+                const dx = tip2.player.x - tip1.player.x;
+                const dy = tip2.player.y - tip1.player.y;
+                const playerDist = Math.sqrt(dx * dx + dy * dy);
+
+                if (playerDist > 0) {
+                  const nx = dx / playerDist;
+                  const ny = dy / playerDist;
+
+                  // Dot product of knife1 direction with vector to player2
+                  const dot1 = tip1.dirX * nx + tip1.dirY * ny;
+                  // Dot product of knife2 direction with vector to player1
+                  const dot2 = tip2.dirX * -nx + tip2.dirY * -ny;
+
+                  // Both dot products should be positive (knives pointing towards each other)
+                  if (dot1 > 0.3 && dot2 > 0.3) {
+                    // Knives are facing each other - propel players apart
+                    const repelForce = 15;
+
+                    tip1.player.vx -= nx * repelForce;
+                    tip1.player.vy -= ny * repelForce;
+                    tip2.player.vx += nx * repelForce;
+                    tip2.player.vy += ny * repelForce;
+                    knifeClashHappened = true;
+                  }
+                }
+              }
+            }
+
+            // Check knife hits on player bodies (if no clash happened)
+            if (!knifeClashHappened) {
+              for (const tipData of knifeTips) {
+                for (const other of this.players) {
+                  if (other.id !== tipData.player.id) {
+                    const otherRect = {
+                      x: other.x - 8,
+                      y: other.y - 11,
+                      w: 16,
+                      h: 22,
+                    };
+                    if (rectsOverlap(tipData.knifeRect, otherRect)) {
+                      this.handlePlayerDeath(other, tipData.player);
+                    }
+                  }
+                }
+              }
+            }
+
+            // Remove expired lasers (after full fade: 0.1s + 3s = 3.1s = 186 frames at 60fps)
+            for (let i = this.lasers.length - 1; i >= 0; i--) {
+              const laser = this.lasers[i];
+              const age = this.frameCount - laser.spawnTime;
+              if (age > 186) {
+                // 3.1 seconds
+                this.lasers.splice(i, 1);
+              }
+            }
+          }
+
+          draw(canvas) {
+            const ctx = canvas.getContext("2d");
+            ctx.imageSmoothingEnabled = false;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Background
+            ctx.fillStyle = "#0e1115";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Grid
+            for (let y = 0; y < LEVEL_H; y++) {
+              for (let x = 0; x < LEVEL_W; x++) {
+                const t = this.tileAt(x, y);
+                if (t === " ") continue;
+                const px = x * TILE_SIZE;
+                const py = y * TILE_SIZE;
+                if (t === "#") {
+                  ctx.fillStyle = "#3b4450";
+                  ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+                } else if (t === "B") {
+                  ctx.fillStyle = "#6a7a8f";
+                  ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+                  ctx.fillStyle = "#8899b0";
+                  ctx.fillRect(px + 4, py + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+                } else if (t === "V") {
+                  ctx.fillStyle = "#a22020";
+                  ctx.beginPath();
+                  ctx.moveTo(px, py + TILE_SIZE);
+                  ctx.lineTo(px + TILE_SIZE / 2, py);
+                  ctx.lineTo(px + TILE_SIZE, py + TILE_SIZE);
+                  ctx.closePath();
+                  ctx.fill();
+                } else if (t === "F") {
+                  ctx.fillStyle = "#1e8fff";
+                  ctx.fillRect(px + 8, py, 6, TILE_SIZE);
+                  ctx.fillStyle = "#8ecbff";
+                  ctx.fillRect(px + 2, py, 4, TILE_SIZE);
+                } else if (t === "S") {
+                  ctx.fillStyle = "#2b9f5a";
+                  ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+                }
+              }
+            }
+
+            // Players
+            for (const pl of this.players) {
+              ctx.fillStyle = pl.id === 0 ? "#ff5a5a" : "#62a5ff";
+              ctx.fillRect(pl.x - 8, pl.y - 11, 16, 22);
+              // Face/eye accents
+              ctx.fillStyle = "#111";
+              ctx.fillRect(pl.x - 4, pl.y - 5, 3, 3);
+              ctx.fillRect(pl.x + 1, pl.y - 5, 3, 3);
+
+              // Draw knife in knife mode
+              if (pl.mode === "knife") {
+                const knifeReach = 18;
+                const knifeLength = 12;
+                const knifeWidth = 4;
+
+                // Calculate angle from velocity, defaulting to lastDir if stationary
+                let angle;
+                const speed = Math.sqrt(pl.vx * pl.vx + pl.vy * pl.vy);
+                if (speed > 0.5) {
+                  angle = Math.atan2(pl.vy, pl.vx);
+                } else {
+                  // Stationary - point in lastDir horizontally
+                  angle = pl.lastDir > 0 ? 0 : Math.PI;
+                }
+
+                // Position knife at the base near player
+                const knifeX = pl.x + Math.cos(angle) * knifeReach;
+                const knifeY = pl.y + Math.sin(angle) * knifeReach;
+
+                ctx.save();
+                ctx.translate(knifeX, knifeY);
+                ctx.rotate(angle);
+
+                // Knife blade - triangle pointing outward
+                ctx.fillStyle = "#ddd";
+                ctx.beginPath();
+                ctx.moveTo(0, -knifeWidth);
+                ctx.lineTo(0, knifeWidth);
+                ctx.lineTo(knifeLength, 0);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.restore();
+              }
+
+              // Draw gun indicator in gun mode
+              if (pl.mode === "gun") {
+                const gunReach = 16;
+                const gunX = pl.x + pl.lastDir * gunReach;
+                const gunY = pl.y;
+
+                // Gun barrel
+                ctx.fillStyle = "#555";
+                ctx.fillRect(
+                  pl.lastDir > 0 ? pl.x + 8 : pl.x - 8 - 8,
+                  gunY - 2,
+                  8,
+                  4
+                );
+
+                // Gun muzzle indicator (orange tip)
+                ctx.fillStyle = "#ff6600";
+                ctx.fillRect(gunX - 2, gunY - 2, 4, 4);
+              }
+
+              // Mode indicator
+              ctx.fillStyle = "#fff";
+              ctx.font = "8px monospace";
+              ctx.fillText(
+                pl.mode === "knife" ? "K" : "G",
+                pl.x - 3,
+                pl.y - 16
+              );
+
+              // Gun reloading indicator
+              if (pl.mode === "gun" && pl.beamCooldown > 0) {
+                ctx.fillStyle = "#ff3333";
+                ctx.font = "bold 9px monospace";
+                ctx.textAlign = "center";
+                ctx.fillText("reloading...", pl.x, pl.y - 24);
+                ctx.textAlign = "left"; // Reset
+              }
+            }
+
+            // Draw lasers with fading effect (flash then trace)
+            for (const laser of this.lasers) {
+              const age = this.frameCount - laser.spawnTime;
+              const fadeToWhiteFrames = 6; // 0.1s flash at 60fps
+              const fadeOutFrames = 180; // 3s trace fade at 60fps
+
+              let color;
+              let alpha = 1;
+              let lineWidth = 3;
+
+              if (age < fadeToWhiteFrames) {
+                // Red flash phase: interpolate from red to white
+                const t = age / fadeToWhiteFrames;
+                const r = 255;
+                const g = Math.floor(0 + (255 - 0) * t);
+                const b = Math.floor(0 + (255 - 0) * t);
+                color = `rgb(${r}, ${g}, ${b})`;
+                lineWidth = 4; // Slightly thicker during flash
+              } else {
+                // White trace phase: fade out
+                const fadeAge = age - fadeToWhiteFrames;
+                alpha = 1 - fadeAge / fadeOutFrames;
+                if (alpha < 0) alpha = 0;
+                color = `rgba(255, 255, 255, ${alpha})`;
+                lineWidth = 2; // Thinner trace
+              }
+
+              ctx.strokeStyle = color;
+              ctx.lineWidth = lineWidth;
+              ctx.shadowColor = color;
+              ctx.shadowBlur = age < fadeToWhiteFrames ? 10 : 4; // Brighter glow during flash
+              ctx.beginPath();
+              ctx.moveTo(laser.x1, laser.y1);
+              ctx.lineTo(laser.x2, laser.y2);
+              ctx.stroke();
+              ctx.shadowBlur = 0;
+            }
+
+            // KnifeScouts title at top left
+            ctx.fillStyle = "rgba(0,0,0,0.6)";
+            ctx.fillRect(10, 10, 140, 35);
+            ctx.fillStyle = "#fff";
+            ctx.font =
+              "bold 18px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial";
+            ctx.fillText("KnifeScouts", 20, 35);
+
+            // Kill counter at top center
+            if (this.started && this.players.length === 2) {
+              const p1 = this.players[0];
+              const p2 = this.players[1];
+
+              ctx.fillStyle = "rgba(0,0,0,0.6)";
+              ctx.fillRect(canvas.width / 2 - 100, 10, 200, 35);
+
+              ctx.font =
+                "bold 20px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial";
+
+              // Player 1 (red) kills
+              ctx.fillStyle = "#ff5a5a";
+              ctx.fillText(p1.kills.toString(), canvas.width / 2 - 60, 35);
+
+              // Separator
+              ctx.fillStyle = "#fff";
+              ctx.fillText("-", canvas.width / 2 - 8, 35);
+
+              // Player 2 (blue) kills
+              ctx.fillStyle = "#62a5ff";
+              ctx.fillText(p2.kills.toString(), canvas.width / 2 + 40, 35);
+            }
+
+            // Winner banner
+            if (this.winnerPlayerId != null) {
+              ctx.fillStyle = "rgba(0,0,0,0.5)";
+              ctx.fillRect(0, 0, canvas.width, 40);
+              ctx.fillStyle = "#fff";
+              ctx.font =
+                "bold 18px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial";
+              ctx.fillText(
+                "Winner: Player " +
+                  (this.winnerPlayerId + 1) +
+                  "  —  Press Space to restart",
+                14,
+                26
+              );
+            }
+          }
+        }
+
+        // Allow resetting after a match using Space.
+        // This is detected via keysPressed in tick; we simply re-arm started when a keypress happens after winner.
+        // On any new start intent, we also reset the level breakables.
+        const originalMaybeStart = PlatformerGame.prototype.maybeStart;
+        PlatformerGame.prototype.maybeStart = function (inputs) {
+          const beforeStarted = this.started;
+          originalMaybeStart.call(this, inputs);
+          if (!beforeStarted && this.started) {
+            // Clear winner between rounds
+            this.winnerPlayerId = undefined;
+            // Reset breakables at the start of a round
+            this.breakTimers = {};
+            this.broken = {};
+            // Reset lasers and frame count
+            this.lasers = [];
+            this.frameCount = 0;
+          }
+        };
+
+        // Start the wrapper
+        PlatformerGame.pointerLock = false;
+        PlatformerGame.preventContextMenu = true;
+        PlatformerGame.touchControls = {};
+
+        const wrapper = new RollbackWrapper(PlatformerGame);
+        wrapper.start();
+
+        // Status text updates
+        const statusEl = document.getElementById("statusText");
+
+        // We poll a bit because the Game instance is encapsulated inside wrapper.
+        function refreshOverlay() {
+          try {
+            const g = wrapper.game; // available post-start
+            if (g) {
+              if (g.winnerPlayerId != null)
+                statusEl.textContent =
+                  "Match finished — winner: Player " +
+                  (g.winnerPlayerId + 1) +
+                  ". Press Space to play again.";
+              else
+                statusEl.textContent = g.started
+                  ? "In game"
+                  : "Connected — press Space/Enter to start";
+            }
+          } catch (_) {}
+          requestAnimationFrame(refreshOverlay);
+        }
+        refreshOverlay();
+
+        // Overlay removed; status text keeps updating while the game runs.
+
+        // Best-effort reset if a player leaves: when the matchmaking UI returns, the wrapper will create a new Game.
+        // We observe DOM for the menu state to update status text. This is heuristic but harmless.
+        const observer = new MutationObserver(() => {
+          const menu = Array.from(document.querySelectorAll("div")).find((d) =>
+            /Private Match|Public Match|Connection Closed/i.test(
+              d.textContent || ""
+            )
+          );
+          if (menu && /Connection Closed/i.test(menu.textContent || "")) {
+            // Hard reset to return to matchmaking cleanly.
+            location.reload();
+          }
+        });
+        observer.observe(document.body, {
+          subtree: true,
+          childList: true,
+          characterData: true,
+        });
+      })();
+    </script>
+  </body>
+</html>
