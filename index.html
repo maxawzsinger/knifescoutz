@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <title>NetplayJS 2-Player Platformer Race</title>
+    <title>KnifeScoutz</title>
     <style>
       html,
       body {
@@ -229,7 +229,7 @@
           friction: 0.5,
           jumpImpulse: 4.0,
           airControlMultiplier: 1, // Air acceleration is 30% of ground acceleration
-          airSpeedMultiplier: 0.3, // Air max speed is 60% of ground max speed
+          airSpeedMultiplier: 0.6, // Air max speed is 60% of ground max speed
 
           // Knife mode physics
           knife: {
@@ -800,6 +800,24 @@
             pl.vy = 0;
             pl.onGround = false;
             pl.invulnerabilityTimer = 180; // 3 seconds at 60fps
+
+            // Also respawn the killer
+            if (killer) {
+              const killerSpawnPositions = findSpawnPositions();
+              if (killer.id === 0) {
+                const br = findBottomRightSpawn();
+                killer.x = br.x;
+                killer.y = br.y;
+              } else {
+                const idx = 1; // blue player uses the other spawn marker
+                killer.x = killerSpawnPositions[idx].x;
+                killer.y = killerSpawnPositions[idx].y;
+              }
+              killer.vx = 0;
+              killer.vy = 0;
+              killer.onGround = false;
+              killer.invulnerabilityTimer = 180; // 3 seconds at 60fps
+            }
           }
 
           // Raycast from (x, y) in direction (dx, dy) until edge of map (passes through terrain)
@@ -1731,22 +1749,22 @@
               const p2 = this.players[1];
 
               ctx.fillStyle = "rgba(0,0,0,0.6)";
-              ctx.fillRect(canvas.width / 2 - 100, 10, 200, 35);
+              ctx.fillRect(canvas.width / 2 - 100, 5, 200, 35);
 
               ctx.font =
                 "bold 20px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial";
 
               // Player 1 (red) kills
               ctx.fillStyle = "#ff5a5a";
-              ctx.fillText(p1.kills.toString(), canvas.width / 2 - 60, 35);
+              ctx.fillText(p1.kills.toString(), canvas.width / 2 - 60, 30);
 
               // Separator
               ctx.fillStyle = "#fff";
-              ctx.fillText("-", canvas.width / 2 - 8, 35);
+              ctx.fillText("-", canvas.width / 2 - 8, 30);
 
               // Player 2 (blue) kills
               ctx.fillStyle = "#62a5ff";
-              ctx.fillText(p2.kills.toString(), canvas.width / 2 + 40, 35);
+              ctx.fillText(p2.kills.toString(), canvas.width / 2 + 40, 30);
             }
 
             // Winner banner
