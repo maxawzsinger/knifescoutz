@@ -114,6 +114,20 @@
       input[type="range"]::-moz-range-thumb:hover {
         background: #4a8ff6;
       }
+      #musicToggle {
+        transition: all 0.2s ease;
+        border: 1px solid #555;
+        border-radius: 4px;
+        padding: 6px 12px;
+        font-size: 12px;
+        cursor: pointer;
+        background: #222;
+        color: #eee;
+      }
+      #musicToggle:hover {
+        background: #333;
+        transform: scale(1.05);
+      }
     </style>
     <script src="./netplayLib.js"></script>
   </head>
@@ -128,6 +142,7 @@
         ><span style="color: #62a5ff">Scoutz</span>
       </div>
       <div class="spacer"></div>
+      <button id="musicToggle" style="margin-right: 10px">🎵 Music ON</button>
       <div id="statusText">Waiting for connection...</div>
     </div>
 
@@ -302,6 +317,195 @@
         }
         setupPhysicsControls();
 
+        // ===== MUSIC SYSTEM =====
+        let audioCtx;
+        let master;
+        let reverb;
+        let musicEnabled = true;
+        let musicStarted = false;
+
+        // Initialize music system
+        function initMusic() {
+          if (musicStarted) return;
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+          // Master gain
+          master = audioCtx.createGain();
+          master.gain.value = 0.36; // 20% louder than before
+          master.connect(audioCtx.destination);
+
+          // Reverb
+          function createReverb(duration = 5, decay = 2) {
+            const rate = audioCtx.sampleRate;
+            const length = rate * duration;
+            const impulse = audioCtx.createBuffer(2, length, rate);
+            for (let c = 0; c < 2; c++) {
+              const ch = impulse.getChannelData(c);
+              for (let i = 0; i < length; i++) {
+                ch[i] =
+                  (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
+              }
+            }
+            const convolver = audioCtx.createConvolver();
+            convolver.buffer = impulse;
+            return convolver;
+          }
+          reverb = createReverb(6, 3);
+
+          // Filter chain
+          const lowpass = audioCtx.createBiquadFilter();
+          lowpass.type = "lowpass";
+          lowpass.frequency.value = 1800;
+
+          const highpass = audioCtx.createBiquadFilter();
+          highpass.type = "highpass";
+          highpass.frequency.value = 120;
+
+          reverb.connect(lowpass);
+          lowpass.connect(highpass);
+          highpass.connect(master);
+
+          // Global LFOs
+          const filterLFO = audioCtx.createOscillator();
+          const filterGain = audioCtx.createGain();
+          filterLFO.frequency.value = 0.02;
+          filterGain.gain.value = 800;
+          filterLFO.connect(filterGain);
+          filterGain.connect(lowpass.frequency);
+          filterLFO.start();
+
+          // Scale — E natural minor
+          window.musicScale = [
+            164.81, 185.0, 196.0, 220.0, 246.94, 261.63, 293.66, 329.63,
+          ];
+
+          musicStarted = true;
+        }
+
+        // Music sound effects
+        function playMetal(freq) {
+          if (!musicEnabled || !audioCtx) return;
+
+          const osc1 = audioCtx.createOscillator();
+          const osc2 = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          const pan = audioCtx.createStereoPanner();
+
+          osc1.type = "sine";
+          osc2.type = "square";
+          osc1.frequency.value = freq;
+          osc2.frequency.value = freq * 2.01;
+
+          gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(
+            0.001,
+            audioCtx.currentTime + 1.5
+          );
+          pan.pan.value = (Math.random() - 0.5) * 1.0;
+
+          osc1.connect(gain);
+          osc2.connect(gain);
+          gain.connect(pan);
+          pan.connect(reverb);
+
+          osc1.start();
+          osc2.start();
+          osc1.stop(audioCtx.currentTime + 1.5);
+          osc2.stop(audioCtx.currentTime + 1.5);
+        }
+
+        function playEcho(freq) {
+          if (!musicEnabled || !audioCtx) return;
+
+          for (let i = 0; i < 3; i++) {
+            const delay = i * 0.25;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = "triangle";
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(
+              0.08 / (i + 1),
+              audioCtx.currentTime + delay
+            );
+            gain.gain.exponentialRampToValueAtTime(
+              0.001,
+              audioCtx.currentTime + delay + 1
+            );
+            osc.connect(gain);
+            gain.connect(reverb);
+            osc.start(audioCtx.currentTime + delay);
+            osc.stop(audioCtx.currentTime + delay + 1);
+          }
+        }
+
+        function playPulse() {
+          if (!musicEnabled || !audioCtx) return;
+
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = "square";
+          osc.frequency.value = 82.41; // E2
+          gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(
+            0.001,
+            audioCtx.currentTime + 0.5
+          );
+          osc.connect(gain);
+          gain.connect(reverb);
+          osc.start();
+          osc.stop(audioCtx.currentTime + 0.5);
+        }
+
+        // Music sequencing
+        function musicSequence() {
+          if (!musicEnabled || !audioCtx || audioCtx.state !== "running")
+            return;
+
+          const randomNote =
+            window.musicScale[
+              Math.floor(Math.random() * window.musicScale.length)
+            ];
+          if (Math.random() < 0.6) playMetal(randomNote * 2);
+          if (Math.random() < 0.4) playEcho(randomNote * 0.5);
+          if (Math.random() < 0.2) playPulse();
+
+          setTimeout(musicSequence, Math.random() * 600 + 400);
+        }
+
+        // Toggle music on/off
+        function toggleMusic() {
+          musicEnabled = !musicEnabled;
+          const button = document.getElementById("musicToggle");
+
+          if (musicEnabled) {
+            button.textContent = "🎵 Music ON";
+            button.style.background = "#222";
+            if (!musicStarted) {
+              initMusic();
+              audioCtx.resume();
+              musicSequence();
+            }
+          } else {
+            button.textContent = "🔇 Music OFF";
+            button.style.background = "#444";
+          }
+        }
+
+        // Setup music toggle button
+        document
+          .getElementById("musicToggle")
+          .addEventListener("click", toggleMusic);
+
+        // Initialize music on first user interaction
+        let musicInitialized = false;
+        function initializeMusicOnInteraction() {
+          if (musicInitialized) return;
+          musicInitialized = true;
+          initMusic();
+          audioCtx.resume();
+          musicSequence();
+        }
+
         // Hide controls panel if DEV_SLIDERS is false
         if (!DEV_SLIDERS) {
           const controlsPanel = document.getElementById("controls");
@@ -320,18 +524,18 @@
         //   * = star (gives 9 kill points and kills other player)
         const LEVEL = [
           "############################################",
-          "#S              *                          #",
-          "#             BBBBB                        #",
+          "#S                 *                       #",
+          "#                BBBBB                     #",
           "#                                         #",
-          "#                       BBBBB             #",
+          "#           BBBBBBBBBBBBBBBB              #",
           "#                                         #",
-          "#              BBBBB                       #",
+          "# BBBBB                                    #",
           "#                                         #",
-          "#                       BBBBB             #",
+          "#     BBBBB                               #",
           "#                                         #",
-          "#              BBBBB                       #",
+          "#         BBBBB                            #",
           "#                                         #",
-          "#                     BBBBB               #",
+          "#                BBBBB                    #",
           "#                                         #",
           "#S                                       F#",
           "############################################",
@@ -470,6 +674,11 @@
               this.collectedStars[key] = true;
               // Give collector 9 kill points
               collector.kills += 9;
+              // Play star collection sound
+              if (musicEnabled && window.musicScale) {
+                const starNote = window.musicScale[4]; // Use 5th note for star
+                playEcho(starNote * 4); // High pitch for star collection
+              }
               // Kill the other player
               for (const other of this.players) {
                 if (other.id !== collector.id) {
@@ -550,11 +759,15 @@
               const kp = input.keysPressed || {};
               if (kp[" "] || kp["Enter"] || kp["Space"] || kp["z"] || kp["x"]) {
                 this.started = true;
+                // Initialize music on game start
+                initializeMusicOnInteraction();
                 return;
               }
               const v = input.wasd();
               if (v.x !== 0 || v.y !== 0) {
                 this.started = true;
+                // Initialize music on game start
+                initializeMusicOnInteraction();
                 return;
               }
             }
@@ -564,6 +777,14 @@
             pl.deaths += 1;
             if (killer) {
               killer.kills += 1;
+              // Play kill sound effect
+              if (musicEnabled && window.musicScale) {
+                const killNote =
+                  window.musicScale[
+                    Math.floor(Math.random() * window.musicScale.length)
+                  ];
+                playMetal(killNote * 3); // Higher pitch for kills
+              }
             }
             const spawnPositions = findSpawnPositions();
             if (pl.id === 0) {
