@@ -115,13 +115,13 @@
         background: #4a8ff6;
       }
     </style>
-    <script src="https://unpkg.com/netplayjs@0.4.1/dist/netplay.js"></script>
+    <script src="./netplayLib.js"></script>
   </head>
   <body>
     <div id="hud">
       <div>
-        <strong>Controls:</strong> WASD/Arrows - Move | Space - Jump/Fire | J -
-        Toggle Knife/Gun Mode
+        <strong>Controls:</strong> WASD/Arrows - Move | Up Arrow - Jump | Space
+        - Dash/Fire | J - Toggle Knife/Gun Mode
       </div>
       <div style="font-weight: bold; font-size: 16px; margin-left: 20px">
         <span style="color: #ff5a5a">Knife</span
@@ -139,56 +139,41 @@
           <span class="control-value">Press J</span>
         </div>
         <div style="font-size: 10px; color: #888; margin-top: 4px">
-          Knife: accel 2, speed 10<br />
+          Knife: accel 1.2, speed 7<br />
           Gun: accel 0.2, speed 2.1
         </div>
       </div>
       <div class="control-item">
         <div class="control-label">
           <span>Gravity</span>
-          <span class="control-value" id="gravityValue">0.7</span>
+          <span class="control-value" id="gravityValue">--</span>
         </div>
-        <input
-          type="range"
-          id="gravitySlider"
-          min="0"
-          max="2"
-          step="0.1"
-          value="0.7"
-        />
+        <input type="range" id="gravitySlider" min="0" max="2" step="0.1" />
       </div>
       <div class="control-item">
         <div class="control-label">
-          <span>Run Acceleration</span>
-          <span class="control-value" id="runAccelValue">0.7</span>
+          <span>🔪 Run Acceleration</span>
+          <span class="control-value" id="runAccelValue">--</span>
         </div>
-        <input
-          type="range"
-          id="runAccelSlider"
-          min="0"
-          max="2"
-          step="0.1"
-          value="0.7"
-        />
+        <input type="range" id="runAccelSlider" min="0" max="5" step="0.1" />
       </div>
       <div class="control-item">
         <div class="control-label">
-          <span>Max Run Speed</span>
-          <span class="control-value" id="maxRunSpeedValue">4.2</span>
+          <span>🔪 Max Run Speed</span>
+          <span class="control-value" id="maxRunSpeedValue">--</span>
         </div>
         <input
           type="range"
           id="maxRunSpeedSlider"
           min="1"
-          max="10"
+          max="15"
           step="0.1"
-          value="4.2"
         />
       </div>
       <div class="control-item">
         <div class="control-label">
           <span>Jump Power</span>
-          <span class="control-value" id="jumpImpulseValue">12.0</span>
+          <span class="control-value" id="jumpImpulseValue">--</span>
         </div>
         <input
           type="range"
@@ -196,13 +181,12 @@
           min="5"
           max="20"
           step="0.5"
-          value="12.0"
         />
       </div>
       <div class="control-item">
         <div class="control-label">
-          <span>Bullet Speed</span>
-          <span class="control-value" id="bulletSpeedValue">8.0</span>
+          <span>🔫 Bullet Speed</span>
+          <span class="control-value" id="bulletSpeedValue">--</span>
         </div>
         <input
           type="range"
@@ -210,7 +194,6 @@
           min="1"
           max="20"
           step="0.5"
-          value="8.0"
         />
       </div>
     </div>
@@ -219,59 +202,102 @@
 
     <script>
       (function () {
-        const DEV_SLIDERS = false;
+        const DEV_SLIDERS = true;
 
         const { Game, RollbackWrapper, NetplayPlayer, DefaultInput, Vec2 } =
           netplayjs;
 
-        // Physics parameters (modifiable via sliders)
+        // ===== PHYSICS PARAMETERS (centralized, modifiable via sliders) =====
         let physicsParams = {
-          gravity: 0.7,
-          runAccel: 0.7,
-          maxRunSpeed: 4.2,
-          jumpImpulse: 12.0,
-          bulletSpeed: 8.0,
+          // Global physics
+          gravity: 0.1,
+          friction: 0.5,
+          jumpImpulse: 4.0,
+          airControlMultiplier: 1, // Air acceleration is 30% of ground acceleration
+          airSpeedMultiplier: 0.3, // Air max speed is 60% of ground max speed
+
+          // Knife mode physics
+          knife: {
+            runAccel: 10,
+            maxRunSpeed: 6,
+            dashForce: 100, // High force for extended range and near-instantaneous dash
+            dashCooldown: 180, // frames (3s at 60fps)
+            reach: 18,
+            length: 12,
+            width: 4,
+            hitSize: 6,
+          },
+
+          // Gun mode physics
+          gun: {
+            runAccel: 0.2,
+            maxRunSpeed: 2.1,
+            bulletSpeed: 8.0,
+            beamCooldown: 180, // frames (3s at 60fps)
+            reach: 16,
+          },
         };
 
         // Wire up physics control sliders
         function setupPhysicsControls() {
-          const controls = [
-            {
-              slider: "gravitySlider",
-              value: "gravityValue",
-              param: "gravity",
-            },
-            {
-              slider: "runAccelSlider",
-              value: "runAccelValue",
-              param: "runAccel",
-            },
-            {
-              slider: "maxRunSpeedSlider",
-              value: "maxRunSpeedValue",
-              param: "maxRunSpeed",
-            },
-            {
-              slider: "jumpImpulseSlider",
-              value: "jumpImpulseValue",
-              param: "jumpImpulse",
-            },
-            {
-              slider: "bulletSpeedSlider",
-              value: "bulletSpeedValue",
-              param: "bulletSpeed",
-            },
-          ];
+          // Gravity slider
+          const gravitySlider = document.getElementById("gravitySlider");
+          const gravityValue = document.getElementById("gravityValue");
+          gravitySlider.value = physicsParams.gravity;
+          gravityValue.textContent = physicsParams.gravity.toFixed(1);
+          gravitySlider.addEventListener("input", (e) => {
+            const val = parseFloat(e.target.value);
+            physicsParams.gravity = val;
+            gravityValue.textContent = val.toFixed(1);
+          });
 
-          controls.forEach(({ slider, value, param }) => {
-            const sliderEl = document.getElementById(slider);
-            const valueEl = document.getElementById(value);
+          // Run Acceleration (knife mode)
+          const runAccelSlider = document.getElementById("runAccelSlider");
+          const runAccelValue = document.getElementById("runAccelValue");
+          runAccelSlider.value = physicsParams.knife.runAccel;
+          runAccelValue.textContent = physicsParams.knife.runAccel.toFixed(1);
+          runAccelSlider.addEventListener("input", (e) => {
+            const val = parseFloat(e.target.value);
+            physicsParams.knife.runAccel = val;
+            runAccelValue.textContent = val.toFixed(1);
+          });
 
-            sliderEl.addEventListener("input", (e) => {
-              const val = parseFloat(e.target.value);
-              physicsParams[param] = val;
-              valueEl.textContent = val.toFixed(1);
-            });
+          // Max Run Speed (knife mode)
+          const maxRunSpeedSlider =
+            document.getElementById("maxRunSpeedSlider");
+          const maxRunSpeedValue = document.getElementById("maxRunSpeedValue");
+          maxRunSpeedSlider.value = physicsParams.knife.maxRunSpeed;
+          maxRunSpeedValue.textContent =
+            physicsParams.knife.maxRunSpeed.toFixed(1);
+          maxRunSpeedSlider.addEventListener("input", (e) => {
+            const val = parseFloat(e.target.value);
+            physicsParams.knife.maxRunSpeed = val;
+            maxRunSpeedValue.textContent = val.toFixed(1);
+          });
+
+          // Jump Power slider
+          const jumpImpulseSlider =
+            document.getElementById("jumpImpulseSlider");
+          const jumpImpulseValue = document.getElementById("jumpImpulseValue");
+          jumpImpulseSlider.value = physicsParams.jumpImpulse;
+          jumpImpulseValue.textContent = physicsParams.jumpImpulse.toFixed(1);
+          jumpImpulseSlider.addEventListener("input", (e) => {
+            const val = parseFloat(e.target.value);
+            physicsParams.jumpImpulse = val;
+            jumpImpulseValue.textContent = val.toFixed(1);
+          });
+
+          // Bullet Speed (gun mode)
+          const bulletSpeedSlider =
+            document.getElementById("bulletSpeedSlider");
+          const bulletSpeedValue = document.getElementById("bulletSpeedValue");
+          bulletSpeedSlider.value = physicsParams.gun.bulletSpeed;
+          bulletSpeedValue.textContent =
+            physicsParams.gun.bulletSpeed.toFixed(1);
+          bulletSpeedSlider.addEventListener("input", (e) => {
+            const val = parseFloat(e.target.value);
+            physicsParams.gun.bulletSpeed = val;
+            bulletSpeedValue.textContent = val.toFixed(1);
           });
         }
         setupPhysicsControls();
@@ -287,27 +313,27 @@
         const TILE_SIZE = 24;
 
         // Level legend:
-        //   # = solid
-        //   B = breakable (breaks 0.5s after first touch)
-        //   V = spike (kills on overlap)
+        //   # = solid border
+        //   B = breakable (breaks 10s after first touch, respawns after 5s)
         //   S = spawn area (left/topmost used for both)
         //   F = finish gate
+        //   * = star (gives 9 kill points and kills other player)
         const LEVEL = [
           "############################################",
-          "#S        ####         B      ####       F #",
-          "#         ####      V         ####         #",
-          "#                    BBB                  ##",
-          "#   #####         #####          #######   #",
-          "#        V                                ##",
-          "#   ##########               BBB          ##",
-          "#                 #######                 ##",
-          "#     BBB                                   #",
-          "#                V         ######          #",
-          "#         #######        B        BBB      #",
-          "#   BBB            #######                 #",
-          "#                 V           ######       #",
-          "#     ######         BBB                  ##",
-          "#S                   V         BBB        ##",
+          "#S              *                          #",
+          "#             BBBBB                        #",
+          "#                                         #",
+          "#                       BBBBB             #",
+          "#                                         #",
+          "#              BBBBB                       #",
+          "#                                         #",
+          "#                       BBBBB             #",
+          "#                                         #",
+          "#              BBBBB                       #",
+          "#                                         #",
+          "#                     BBBBB               #",
+          "#                                         #",
+          "#S                                       F#",
           "############################################",
         ];
 
@@ -366,6 +392,38 @@
           );
         }
 
+        // Check if a position is legal (no collision with solid tiles)
+        function isPositionLegal(game, x, y, width = 16, height = 22) {
+          const xMin = Math.floor((x - width / 2) / TILE_SIZE);
+          const xMax = Math.floor((x + width / 2) / TILE_SIZE);
+          const yMin = Math.floor((y - height / 2) / TILE_SIZE);
+          const yMax = Math.floor((y + height / 2) / TILE_SIZE);
+
+          for (let ty = yMin; ty <= yMax; ty++) {
+            for (let tx = xMin; tx <= xMax; tx++) {
+              const t = game.tileAt(tx, ty);
+              if (t === "#" || t === "B") {
+                const tileRect = {
+                  x: tx * TILE_SIZE,
+                  y: ty * TILE_SIZE,
+                  w: TILE_SIZE,
+                  h: TILE_SIZE,
+                };
+                const playerRect = {
+                  x: x - width / 2,
+                  y: y - height / 2,
+                  w: width,
+                  h: height,
+                };
+                if (rectsOverlap(playerRect, tileRect)) {
+                  return false;
+                }
+              }
+            }
+          }
+          return true;
+        }
+
         class PlatformerGame extends Game {
           static timestep = 1000 / 60;
           static canvasSize = { width: CANVAS_W, height: CANVAS_H };
@@ -376,19 +434,51 @@
           started = false;
           winnerPlayerId = undefined; // number | undefined
           breakTimers = {}; // key "x,y" -> frames remaining until break
-          broken = {}; // key "x,y" -> true (for broken 'B' tiles)
+          broken = {}; // key "x,y" -> frame number when tile broke (for respawn tracking)
           lasers = []; // active lasers { ownerId, x1, y1, x2, y2, spawnTime } (time in frames)
           frameCount = 0; // total frames elapsed since game start
+          collectedStars = {}; // key "x,y" -> true if star at this position has been collected
 
           tileAt(tx, ty) {
             if (tx < 0 || ty < 0 || tx >= LEVEL_W || ty >= LEVEL_H) return "#";
             const key = tx + "," + ty;
-            if (this.broken[key]) return " ";
-            return LEVEL[ty][tx];
+            const brokeFrame = this.broken[key];
+            if (brokeFrame !== undefined) {
+              // Check if 5 seconds (300 frames) have passed for respawn
+              const framesSinceBroken = this.frameCount - brokeFrame;
+              if (framesSinceBroken < 300) {
+                return " "; // Still broken
+              }
+              // Respawn: remove from broken list
+              delete this.broken[key];
+            }
+            const tile = LEVEL[ty][tx];
+            // If it's a star and has been collected, return empty space
+            if (tile === "*" && this.collectedStars[key]) {
+              return " ";
+            }
+            return tile;
           }
           breakTile(tx, ty) {
             const key = tx + "," + ty;
-            this.broken[key] = true;
+            this.broken[key] = this.frameCount;
+          }
+
+          collectStar(tx, ty, collector) {
+            const key = tx + "," + ty;
+            if (LEVEL[ty][tx] === "*" && !this.collectedStars[key]) {
+              this.collectedStars[key] = true;
+              // Give collector 9 kill points
+              collector.kills += 9;
+              // Kill the other player
+              for (const other of this.players) {
+                if (other.id !== collector.id) {
+                  this.handlePlayerDeath(other, collector);
+                }
+              }
+              return true; // Star was collected
+            }
+            return false; // No star to collect
           }
 
           // Non-replicated transient
@@ -409,6 +499,9 @@
               mode: "knife", // "knife" or "gun"
               lastDir: 1, // 1 = right, -1 = left
               beamCooldown: 0, // frames until next beam
+              dashCooldown: 0, // frames until next dash (knife mode)
+              dashTrail: [], // Array of {x, y, time} for dash trail effect
+              invulnerabilityTimer: 0, // frames of invulnerability remaining
             }));
             // Ensure red player (id 0) starts bottom-right.
             const br = findBottomRightSpawn();
@@ -422,6 +515,7 @@
             // Reset level breakables and player state
             this.breakTimers = {};
             this.broken = {};
+            this.collectedStars = {};
             this.winnerPlayerId = undefined;
             this.started = false;
             this.lasers = [];
@@ -437,6 +531,9 @@
               pl.mode = "knife";
               pl.lastDir = 1;
               pl.beamCooldown = 0;
+              pl.dashCooldown = 0;
+              pl.dashTrail = [];
+              pl.invulnerabilityTimer = 0;
             });
             // Keep red player (id 0) bottom-right on reset.
             const br = findBottomRightSpawn();
@@ -481,9 +578,10 @@
             pl.vx = 0;
             pl.vy = 0;
             pl.onGround = false;
+            pl.invulnerabilityTimer = 180; // 3 seconds at 60fps
           }
 
-          // Raycast from (x, y) in direction (dx, dy) until hitting terrain
+          // Raycast from (x, y) in direction (dx, dy) until edge of map (passes through terrain)
           raycastLaser(x, y, dx, dy) {
             const maxDist = Math.max(CANVAS_W, CANVAS_H) * 2;
             const step = 1; // pixel steps for raycasting
@@ -494,11 +592,13 @@
               currentX += dx * step;
               currentY += dy * step;
 
-              const tx = Math.floor(currentX / TILE_SIZE);
-              const ty = Math.floor(currentY / TILE_SIZE);
-              const tile = this.tileAt(tx, ty);
-
-              if (tile === "#" || tile === "B") {
+              // Check if we've gone off the map edges
+              if (
+                currentX < 0 ||
+                currentX >= CANVAS_W ||
+                currentY < 0 ||
+                currentY >= CANVAS_H
+              ) {
                 return { x: currentX, y: currentY };
               }
             }
@@ -613,7 +713,7 @@
 
             const gravity = physicsParams.gravity;
             const jumpImpulse = physicsParams.jumpImpulse;
-            const friction = 0.85;
+            const friction = physicsParams.friction;
 
             // Advance timers for breakable tiles; when they hit 0, remove tile.
             for (const key of Object.keys(this.breakTimers)) {
@@ -630,21 +730,111 @@
               const pl = this.players[id];
               if (!pl) continue;
 
+              // Decrement invulnerability timer
+              if (pl.invulnerabilityTimer > 0) {
+                pl.invulnerabilityTimer -= 1;
+              }
+
               // Handle mode toggle (j key)
               const pressed = input.keysPressed || {};
               if (pressed["j"]) {
                 pl.mode = pl.mode === "knife" ? "gun" : "knife";
               }
 
+              // Knife mode: handle dash ability
+              if (pl.mode === "knife") {
+                if (pl.dashCooldown > 0) {
+                  pl.dashCooldown -= 1;
+                }
+
+                // Dash on spacebar press (if not cooling down)
+                const dashPressed = !!(pressed[" "] || pressed["Space"]);
+                if (dashPressed && pl.dashCooldown === 0) {
+                  // Calculate maximum safe dash distance
+                  const dashDirection = pl.lastDir;
+                  const maxDashDistance = physicsParams.knife.dashForce;
+                  let safeDashDistance = maxDashDistance;
+
+                  // Binary search to find maximum safe distance
+                  let minDistance = 0;
+                  let maxDistance = maxDashDistance;
+                  const searchSteps = 10; // Number of binary search steps
+
+                  for (let step = 0; step < searchSteps; step++) {
+                    const testDistance = (minDistance + maxDistance) / 2;
+                    const testX = pl.x + dashDirection * testDistance;
+                    const testY = pl.y;
+
+                    if (isPositionLegal(this, testX, testY)) {
+                      minDistance = testDistance;
+                      safeDashDistance = testDistance;
+                    } else {
+                      maxDistance = testDistance;
+                    }
+                  }
+
+                  // Record dash for collision resolution after all players move
+                  pl.pendingDash = {
+                    startX: pl.x,
+                    startY: pl.y,
+                    endX: pl.x + dashDirection * safeDashDistance,
+                    endY: pl.y, // horizontal dash
+                  };
+
+                  // Create trail segments during dash
+                  const currentTime = Date.now();
+                  const segments = 8; // More trail segments for better visual effect
+                  const trailDistance = safeDashDistance; // Use actual safe distance for trail
+
+                  // Clear existing trail
+                  pl.dashTrail = [];
+
+                  // Create trail segments along the dash path
+                  for (let i = 0; i < segments; i++) {
+                    const progress = (i + 1) / segments; // Evenly distributed along path
+                    const trailX =
+                      pl.x + dashDirection * trailDistance * progress;
+                    const trailY = pl.y;
+                    pl.dashTrail.push({
+                      x: trailX,
+                      y: trailY,
+                      time: currentTime,
+                      alpha: 0.3, // Start much more transparent
+                    });
+                  }
+
+                  // Apply dash impulse for the safe distance
+                  pl.vx = dashDirection * safeDashDistance;
+                  pl.dashCooldown = physicsParams.knife.dashCooldown;
+                }
+              }
+
               // Mode-specific physics parameters
-              const runAccel = pl.mode === "knife" ? 2 : 0.2;
-              const maxRunSpeed = pl.mode === "knife" ? 10 : 2.1;
+              let runAccel =
+                pl.mode === "knife"
+                  ? physicsParams.knife.runAccel
+                  : physicsParams.gun.runAccel;
+              let maxRunSpeed =
+                pl.mode === "knife"
+                  ? physicsParams.knife.maxRunSpeed
+                  : physicsParams.gun.maxRunSpeed;
+
+              // Apply air control multipliers when not on ground
+              if (!pl.onGround) {
+                runAccel *= physicsParams.airControlMultiplier;
+                maxRunSpeed *= physicsParams.airSpeedMultiplier;
+              }
 
               // Horizontal input
               const move = input.wasd();
               pl.vx += move.x * runAccel;
-              if (pl.vx > maxRunSpeed) pl.vx = maxRunSpeed;
-              if (pl.vx < -maxRunSpeed) pl.vx = -maxRunSpeed;
+
+              // Only apply speed limits if not dashing (dash bypasses speed limits)
+              if (pl.dashCooldown < physicsParams.knife.dashCooldown - 3) {
+                // Allow 3 frames of dash movement
+                if (pl.vx > maxRunSpeed) pl.vx = maxRunSpeed;
+                if (pl.vx < -maxRunSpeed) pl.vx = -maxRunSpeed;
+              }
 
               // Track last direction of travel for knife
               if (Math.abs(pl.vx) > 0.5) {
@@ -653,12 +843,7 @@
 
               // Jump
               const held = input.keysHeld || {};
-              const jumpPressed = !!(
-                pressed["w"] ||
-                pressed["ArrowUp"] ||
-                pressed[" "] ||
-                pressed["Space"]
-              );
+              const jumpPressed = !!(pressed["w"] || pressed["ArrowUp"]);
               if (jumpPressed && pl.onGround) {
                 pl.vy = -jumpImpulse;
                 pl.onGround = false;
@@ -679,7 +864,7 @@
 
                   // Raycast to find where laser hits terrain
                   // Offset start position away from player so laser doesn't connect to them
-                  const offsetDist = 20;
+                  const offsetDist = physicsParams.gun.reach + 4; // slightly beyond gun reach
                   const laserStart = {
                     x: pl.x + dirX * offsetDist,
                     y: pl.y + dirY * offsetDist,
@@ -693,7 +878,7 @@
 
                   // Check if laser hits any player
                   for (const other of this.players) {
-                    if (other.id !== pl.id) {
+                    if (other.id !== pl.id && other.invulnerabilityTimer <= 0) {
                       const otherRect = {
                         x: other.x - 8,
                         y: other.y - 11,
@@ -722,7 +907,7 @@
                     y2: laserEnd.y,
                     spawnTime: this.frameCount,
                   });
-                  pl.beamCooldown = 180; // 3 seconds
+                  pl.beamCooldown = physicsParams.gun.beamCooldown;
                 }
               }
 
@@ -805,7 +990,7 @@
                       if (t === "B") {
                         const key = tx + "," + ty;
                         if (this.breakTimers[key] == null)
-                          this.breakTimers[key] = Math.round(0.5 * 60); // 0.5s @60fps
+                          this.breakTimers[key] = Math.round(10 * 60); // 10s @60fps
                       }
                     }
                   }
@@ -821,7 +1006,7 @@
                 pl.y = newY;
               }
 
-              // Spikes and finish detection
+              // Finish detection
               const playerRectFull = {
                 x: pl.x - width / 2,
                 y: pl.y - height / 2,
@@ -839,17 +1024,7 @@
               for (let ty = ty0; ty <= ty1; ty++) {
                 for (let tx = tx0; tx <= tx1; tx++) {
                   const t = this.tileAt(tx, ty);
-                  if (t === "V") {
-                    const tileRect = {
-                      x: tx * TILE_SIZE,
-                      y: ty * TILE_SIZE,
-                      w: TILE_SIZE,
-                      h: TILE_SIZE,
-                    };
-                    if (rectsOverlap(playerRectFull, tileRect)) {
-                      this.handlePlayerDeath(pl, null);
-                    }
-                  } else if (t === "F") {
+                  if (t === "F") {
                     const tileRect = {
                       x: tx * TILE_SIZE,
                       y: ty * TILE_SIZE,
@@ -863,6 +1038,17 @@
                       this.winnerPlayerId = pl.id;
                       this.started = false;
                     }
+                  } else if (t === "*") {
+                    // Star collection detection
+                    const tileRect = {
+                      x: tx * TILE_SIZE,
+                      y: ty * TILE_SIZE,
+                      w: TILE_SIZE,
+                      h: TILE_SIZE,
+                    };
+                    if (rectsOverlap(playerRectFull, tileRect)) {
+                      this.collectStar(tx, ty, pl);
+                    }
                   }
                 }
               }
@@ -871,14 +1057,89 @@
               if (Math.abs(move.x) < 0.01 && pl.onGround) pl.vx *= friction;
             }
 
+            // --- Resolve knife dashes after all players moved this tick ---
+            const PLAYER_W = 16,
+              PLAYER_H = 22;
+
+            // Expand-rect helper for Minkowski sum: expand target by half the width/height of the dashing player.
+            // This lets us do "segment vs expanded-rect" instead of "swept AABB vs rect".
+            function expandedRectFor(other) {
+              const GRACE = 2; // pixels - grace window for high-latency rollback
+              return {
+                x: other.x - (PLAYER_W + GRACE),
+                y: other.y - (PLAYER_H + GRACE),
+                w: (PLAYER_W + GRACE) * 2,
+                h: (PLAYER_H + GRACE) * 2,
+              };
+            }
+
+            // Segment vs axis-aligned rectangle (Liang–Barsky style; returns true if intersects)
+            function segmentIntersectsRect(x1, y1, x2, y2, r) {
+              let t0 = 0,
+                t1 = 1;
+              const dx = x2 - x1,
+                dy = y2 - y1;
+
+              const clip = (p, q) => {
+                if (p === 0) return q >= 0;
+                const t = q / p;
+                if (p < 0) {
+                  if (t > t1) return false;
+                  if (t > t0) t0 = t;
+                } else {
+                  if (t < t0) return false;
+                  if (t < t1) t1 = t;
+                }
+                return true;
+              };
+
+              // Left, Right, Bottom, Top edges
+              if (!clip(-dx, x1 - r.x)) return false;
+              if (!clip(dx, r.x + r.w - x1)) return false;
+              if (!clip(-dy, y1 - r.y)) return false;
+              if (!clip(dy, r.y + r.h - y1)) return false;
+
+              return t0 <= t1;
+            }
+
+            // collect and clear to avoid re-hitting next frame
+            const dashes = [];
+            for (const pl of this.players) {
+              if (pl.pendingDash) {
+                dashes.push({ owner: pl, ...pl.pendingDash });
+                pl.pendingDash = undefined;
+              }
+            }
+
+            // now test recorded dash segments against others' FINAL positions
+            for (const dash of dashes) {
+              for (const other of this.players) {
+                if (other.id === dash.owner.id) continue;
+                if (other.invulnerabilityTimer > 0) continue;
+
+                const rect = expandedRectFor(other);
+                if (
+                  segmentIntersectsRect(
+                    dash.startX,
+                    dash.startY,
+                    dash.endX,
+                    dash.endY,
+                    rect
+                  )
+                ) {
+                  this.handlePlayerDeath(other, dash.owner);
+                }
+              }
+            }
+
             // Knife mode: check knife collision with other players
             const knifeTips = []; // Store knife tip positions for knife-vs-knife collision
 
             for (const pl of this.players) {
               if (pl.mode === "knife") {
-                const knifeReach = 18;
-                const knifeLength = 12;
-                const knifeHitSize = 6;
+                const knifeReach = physicsParams.knife.reach;
+                const knifeLength = physicsParams.knife.length;
+                const knifeHitSize = physicsParams.knife.hitSize;
 
                 // Calculate knife position based on velocity direction
                 let angle;
@@ -955,7 +1216,10 @@
             if (!knifeClashHappened) {
               for (const tipData of knifeTips) {
                 for (const other of this.players) {
-                  if (other.id !== tipData.player.id) {
+                  if (
+                    other.id !== tipData.player.id &&
+                    other.invulnerabilityTimer <= 0
+                  ) {
                     const otherRect = {
                       x: other.x - 8,
                       y: other.y - 11,
@@ -994,9 +1258,29 @@
             for (let y = 0; y < LEVEL_H; y++) {
               for (let x = 0; x < LEVEL_W; x++) {
                 const t = this.tileAt(x, y);
-                if (t === " ") continue;
                 const px = x * TILE_SIZE;
                 const py = y * TILE_SIZE;
+
+                // Draw respawning platforms with ghosted preview
+                const key = x + "," + y;
+                const brokeFrame = this.broken[key];
+                if (brokeFrame !== undefined && LEVEL[y][x] === "B") {
+                  const framesSinceBroken = this.frameCount - brokeFrame;
+                  const respawnProgress = framesSinceBroken / 300; // 0 to 1
+
+                  if (respawnProgress > 0.7) {
+                    // Show ghosted preview in last 1.5 seconds
+                    const alpha = (respawnProgress - 0.7) / 0.3; // 0 to 1 over last 30%
+                    ctx.globalAlpha = alpha * 0.4;
+                    ctx.fillStyle = "#6a7a8f";
+                    ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+                    ctx.fillStyle = "#8899b0";
+                    ctx.fillRect(px + 4, py + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+                    ctx.globalAlpha = 1;
+                  }
+                }
+
+                if (t === " ") continue;
                 if (t === "#") {
                   ctx.fillStyle = "#3b4450";
                   ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
@@ -1005,14 +1289,6 @@
                   ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
                   ctx.fillStyle = "#8899b0";
                   ctx.fillRect(px + 4, py + 4, TILE_SIZE - 8, TILE_SIZE - 8);
-                } else if (t === "V") {
-                  ctx.fillStyle = "#a22020";
-                  ctx.beginPath();
-                  ctx.moveTo(px, py + TILE_SIZE);
-                  ctx.lineTo(px + TILE_SIZE / 2, py);
-                  ctx.lineTo(px + TILE_SIZE, py + TILE_SIZE);
-                  ctx.closePath();
-                  ctx.fill();
                 } else if (t === "F") {
                   ctx.fillStyle = "#1e8fff";
                   ctx.fillRect(px + 8, py, 6, TILE_SIZE);
@@ -1021,7 +1297,70 @@
                 } else if (t === "S") {
                   ctx.fillStyle = "#2b9f5a";
                   ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+                } else if (t === "*") {
+                  // Draw star with golden color and glow effect
+                  const centerX = px + TILE_SIZE / 2;
+                  const centerY = py + TILE_SIZE / 2;
+                  const starSize = 8;
+
+                  // Glow effect
+                  ctx.shadowColor = "#ffdd00";
+                  ctx.shadowBlur = 8;
+
+                  // Draw star shape
+                  ctx.fillStyle = "#ffdd00";
+                  ctx.beginPath();
+                  for (let i = 0; i < 5; i++) {
+                    const angle = (i * 4 * Math.PI) / 5;
+                    const x = centerX + Math.cos(angle) * starSize;
+                    const y = centerY + Math.sin(angle) * starSize;
+                    if (i === 0) {
+                      ctx.moveTo(x, y);
+                    } else {
+                      ctx.lineTo(x, y);
+                    }
+                  }
+                  ctx.closePath();
+                  ctx.fill();
+
+                  // Reset shadow
+                  ctx.shadowBlur = 0;
                 }
+              }
+            }
+
+            // Render dash trails
+            for (const pl of this.players) {
+              if (pl.dashTrail && pl.dashTrail.length > 0) {
+                const currentTime = Date.now();
+                const fadeDuration = 1000; // 1 second
+
+                for (const trail of pl.dashTrail) {
+                  const age = currentTime - trail.time;
+                  if (age < fadeDuration) {
+                    const alpha = trail.alpha * (1.0 - age / fadeDuration);
+                    ctx.globalAlpha = alpha;
+                    ctx.fillStyle = pl.id === 0 ? "#ff5a5a" : "#62a5ff";
+                    ctx.fillRect(trail.x - 8, trail.y - 11, 16, 22);
+                    // Face/eye accents for trail
+                    ctx.fillStyle = "#111";
+                    ctx.fillRect(trail.x - 4, trail.y - 5, 3, 3);
+                    ctx.fillRect(trail.x + 1, trail.y - 5, 3, 3);
+                  }
+                }
+                ctx.globalAlpha = 1.0; // Reset alpha
+              }
+            }
+
+            // Clean up expired trail segments
+            for (const pl of this.players) {
+              if (pl.dashTrail && pl.dashTrail.length > 0) {
+                const currentTime = Date.now();
+                const fadeDuration = 1000; // 1 second
+                pl.dashTrail = pl.dashTrail.filter((trail) => {
+                  const age = currentTime - trail.time;
+                  return age < fadeDuration;
+                });
               }
             }
 
@@ -1036,9 +1375,9 @@
 
               // Draw knife in knife mode
               if (pl.mode === "knife") {
-                const knifeReach = 18;
-                const knifeLength = 12;
-                const knifeWidth = 4;
+                const knifeReach = physicsParams.knife.reach;
+                const knifeLength = physicsParams.knife.length;
+                const knifeWidth = physicsParams.knife.width;
 
                 // Calculate angle from velocity, defaulting to lastDir if stationary
                 let angle;
@@ -1072,7 +1411,7 @@
 
               // Draw gun indicator in gun mode
               if (pl.mode === "gun") {
-                const gunReach = 16;
+                const gunReach = physicsParams.gun.reach;
                 const gunX = pl.x + pl.lastDir * gunReach;
                 const gunY = pl.y;
 
@@ -1107,6 +1446,24 @@
                 ctx.fillText("reloading...", pl.x, pl.y - 24);
                 ctx.textAlign = "left"; // Reset
               }
+
+              // Knife dash reloading indicator
+              if (pl.mode === "knife" && pl.dashCooldown > 0) {
+                ctx.fillStyle = "#ff3333";
+                ctx.font = "bold 9px monospace";
+                ctx.textAlign = "center";
+                ctx.fillText("reloading...", pl.x, pl.y - 24);
+                ctx.textAlign = "left"; // Reset
+              }
+
+              // Invulnerability indicator
+              if (pl.invulnerabilityTimer > 0) {
+                ctx.fillStyle = "#00ff00";
+                ctx.font = "bold 10px monospace";
+                ctx.textAlign = "center";
+                ctx.fillText("INVULNERABLE", pl.x, pl.y - 36);
+                ctx.textAlign = "left"; // Reset
+              }
             }
 
             // Draw lasers with fading effect (flash then trace)
@@ -1117,7 +1474,7 @@
 
               let color;
               let alpha = 1;
-              let lineWidth = 3;
+              let lineWidth = 1.5;
 
               if (age < fadeToWhiteFrames) {
                 // Red flash phase: interpolate from red to white
@@ -1126,14 +1483,14 @@
                 const g = Math.floor(0 + (255 - 0) * t);
                 const b = Math.floor(0 + (255 - 0) * t);
                 color = `rgb(${r}, ${g}, ${b})`;
-                lineWidth = 4; // Slightly thicker during flash
+                lineWidth = 2; // Slightly thicker during flash
               } else {
                 // White trace phase: fade out
                 const fadeAge = age - fadeToWhiteFrames;
                 alpha = 1 - fadeAge / fadeOutFrames;
                 if (alpha < 0) alpha = 0;
                 color = `rgba(255, 255, 255, ${alpha})`;
-                lineWidth = 2; // Thinner trace
+                lineWidth = 1; // Thinner trace
               }
 
               ctx.strokeStyle = color;
@@ -1146,14 +1503,6 @@
               ctx.stroke();
               ctx.shadowBlur = 0;
             }
-
-            // KnifeScouts title at top left
-            ctx.fillStyle = "rgba(0,0,0,0.6)";
-            ctx.fillRect(10, 10, 140, 35);
-            ctx.fillStyle = "#fff";
-            ctx.font =
-              "bold 18px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial";
-            ctx.fillText("KnifeScouts", 20, 35);
 
             // Kill counter at top center
             if (this.started && this.players.length === 2) {
@@ -1210,6 +1559,7 @@
             // Reset breakables at the start of a round
             this.breakTimers = {};
             this.broken = {};
+            this.collectedStars = {};
             // Reset lasers and frame count
             this.lasers = [];
             this.frameCount = 0;
